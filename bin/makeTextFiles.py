@@ -4,22 +4,41 @@ import numpy as np
 import os
 import matplotlib.pyplot as plt
 import h5py
+import argparse
 
-filePath = '/scratch/ntf229/880Msun_split/uv_background/m12i_res7100_uvb-late/1Myr_res880/output/snapdir_696/'
-textPath = '/scratch/ntf229/880Msun_split/TextFiles/'
-plotPath = '/home/ntf229/CCA/880Msun_split/plots/'
+parser = argparse.ArgumentParser()
+parser.add_argument("--index") # index of snapshot (see snaps below)                                                                                        $
+args = parser.parse_args()
+index = int(args.index)
+
+snaps = ["snapdir_570","snapdir_576","snapdir_581","snapdir_586","snapdir_591","snapdir_596","snapdir_601","snapdir_606","snapdir_611","snapdir_616","snapdir_621","snapdir_626","snapdir_631","snapdir_636","snapdir_641","snapdir_646","snapdir_651","snapdir_656","snapdir_661","snapdir_666","snapdir_671","snapdir_676","snapdir_681","snapdir_686","snapdir_691","snapdir_696"]
+snap_num = snaps[index].split('_')[1]
+
+if index == 0: # parent snapshot
+    filePath = '/scratch/ntf229/880Msun_split/uv_background/m12i_res7100_uvb-late/output/'+snaps[index]+'/'
+else:
+    filePath = '/scratch/ntf229/880Msun_split/uv_background/m12i_res7100_uvb-late/1Myr_res880/output/'+snaps[index]+'/'
+
+textPath = '/scratch/ntf229/880Msun_split/TextFiles/'+snaps[index]+'/'
 
 # Create directories if they don't already exist
 os.system('mkdir -p '+textPath)
-os.system('mkdir -p '+plotPath)
+
+boxSize = 6.e4 # in pc
+
+center = np.load('/scratch/ntf229/880Msun_split/resources/centers/'+snap_num+'.npy')
 
 # Spatial cuts (in pc)
-xAbsMin = 4.180e7 # x,y,z length: 0.005e7 pc = 5e4 pc = 50 kpc 
-xAbsMax = 4.185e7
-yAbsMin = 4.4125e7
-yAbsMax = 4.4175e7
-zAbsMin = 4.625e7
-zAbsMax = 4.630e7
+xAbsMin = center[0] - (boxSize/2)
+xAbsMax = center[0] + (boxSize/2)
+yAbsMin = center[1] - (boxSize/2)
+yAbsMax = center[1] + (boxSize/2)
+zAbsMin = center[2] - (boxSize/2)
+zAbsMax = center[2] + (boxSize/2)
+
+xCenter = (xAbsMin + xAbsMax) / 2
+yCenter = (yAbsMin + yAbsMax) / 2
+zCenter = (zAbsMin + zAbsMax) / 2
 
 # constants
 proton_mass = 8.4089382e-58 # in solar masses
@@ -28,16 +47,18 @@ gamma = 5./3.
 XH = 0.76 
 y_helium = (1.0-XH)/(4.0*XH)  # from xiangchang ma physics.py
 
-f = h5py.File(filePath+'snapshot_696.0.hdf5', 'r')
+#f = h5py.File(filePath+'snapshot_696.0.hdf5', 'r')
+f = h5py.File(filePath+'snapshot_'+snap_num+'.0.hdf5', 'r')
 numFiles = f['Header'].attrs['NumFilesPerSnapshot']
 hubble = f['Header'].attrs['HubbleParam']
 hinv = 1.0 / hubble
 OmegaM = 0.272 
 
 for i in range(numFiles):
-        
+    
     # load data from current file
-    f = h5py.File(filePath+'snapshot_696.'+str(i)+'.hdf5', 'r')
+    #f = h5py.File(filePath+'snapshot_696.'+str(i)+'.hdf5', 'r')
+    f = h5py.File(filePath+'snapshot_'+snap_num+'.'+str(i)+'.hdf5', 'r')
     stars = f['PartType4']
     gas = f['PartType0']
     
@@ -74,7 +95,7 @@ for i in range(numFiles):
     for j in range(len(mu)):
         mean_molecular_weight[j] = mu[j]*proton_mass
         temp_gas[j] = mean_molecular_weight[j] * (gamma-1) * InternalEnergy[j] / k_Boltzmann
-
+    
     # append data
     if i == 0:
         full_x_pos = x_pos 
@@ -113,181 +134,131 @@ for i in range(numFiles):
         full_metals_gas = np.append(full_metals_gas, metals_gas)
         full_temp_gas = np.append(full_temp_gas, temp_gas)
 
-# Make cuts in the data based on spatial position
-starIndex = [] # indices of stars to be removed
-gasIndex = [] # indices of gas to be removed
+# make spatial cuts  
+xMin = full_x_pos > xAbsMin
+xMax = full_x_pos[xMin] < xAbsMax
+yMin = full_y_pos[xMin][xMax] > yAbsMin
+yMax = full_y_pos[xMin][xMax][yMin] < yAbsMax
+zMin = full_z_pos[xMin][xMax][yMin][yMax] > zAbsMin
+zMax = full_z_pos[xMin][xMax][yMin][yMax][zMin] < zAbsMax
 
-for i in range(len(full_x_pos)):
-    if (full_x_pos[i] < xAbsMin) or (full_x_pos[i] > xAbsMax):
-        starIndex.append(i)
-    elif (full_y_pos[i] < yAbsMin) or (full_y_pos[i] > yAbsMax):
-        starIndex.append(i)
-    elif (full_z_pos[i] < zAbsMin) or (full_z_pos[i] > zAbsMax):
-        starIndex.append(i)
+cut_x_pos = full_x_pos[xMin][xMax][yMin][yMax][zMin][zMax]
+cut_y_pos = full_y_pos[xMin][xMax][yMin][yMax][zMin][zMax]
+cut_z_pos = full_z_pos[xMin][xMax][yMin][yMax][zMin][zMax]
+cut_smooth = full_smooth[xMin][xMax][yMin][yMax][zMin][zMax]
+cut_x_vel = full_x_vel[xMin][xMax][yMin][yMax][zMin][zMax]
+cut_y_vel = full_y_vel[xMin][xMax][yMin][yMax][zMin][zMax]
+cut_z_vel = full_z_vel[xMin][xMax][yMin][yMax][zMin][zMax]
+cut_mass = full_mass[xMin][xMax][yMin][yMax][zMin][zMax]
+cut_metals = full_metals[xMin][xMax][yMin][yMax][zMin][zMax]
+cut_age = full_age[xMin][xMax][yMin][yMax][zMin][zMax]
 
-for i in range(len(full_x_pos_gas)):
-    if (full_x_pos_gas[i] < xAbsMin) or (full_x_pos_gas[i] > xAbsMax):
-        gasIndex.append(i)
-    elif (full_y_pos_gas[i] < yAbsMin) or (full_y_pos_gas[i] > yAbsMax):
-        gasIndex.append(i)
-    elif (full_z_pos_gas[i] < zAbsMin) or (full_z_pos_gas[i] > zAbsMax):
-        gasIndex.append(i)
+xMinGas = full_x_pos_gas > xAbsMin
+xMaxGas = full_x_pos_gas[xMinGas] < xAbsMax
+yMinGas = full_y_pos_gas[xMinGas][xMaxGas] > yAbsMin
+yMaxGas = full_y_pos_gas[xMinGas][xMaxGas][yMinGas] < yAbsMax
+zMinGas = full_z_pos_gas[xMinGas][xMaxGas][yMinGas][yMaxGas] > zAbsMin
+zMaxGas = full_z_pos_gas[xMinGas][xMaxGas][yMinGas][yMaxGas][zMinGas] < zAbsMax
 
-cut_x_pos = np.float32(np.delete(full_x_pos,starIndex))
-cut_y_pos = np.float32(np.delete(full_y_pos,starIndex))
-cut_z_pos = np.float32(np.delete(full_z_pos,starIndex))
-cut_mass = np.float32(np.delete(full_mass,starIndex))
-cut_metals = np.float32(np.delete(full_metals,starIndex) )
-cut_age = np.float32(np.delete(full_age,starIndex))
-cut_x_vel = np.float32(np.delete(full_x_vel,starIndex))
-cut_y_vel = np.float32(np.delete(full_y_vel,starIndex))
-cut_z_vel = np.float32(np.delete(full_z_vel,starIndex))
-cut_smooth = np.float32(np.delete(full_smooth,starIndex))
+cut_x_pos_gas = full_x_pos_gas[xMinGas][xMaxGas][yMinGas][yMaxGas][zMinGas][zMaxGas]
+cut_y_pos_gas = full_y_pos_gas[xMinGas][xMaxGas][yMinGas][yMaxGas][zMinGas][zMaxGas]
+cut_z_pos_gas = full_z_pos_gas[xMinGas][xMaxGas][yMinGas][yMaxGas][zMinGas][zMaxGas]
+cut_smooth_gas = full_smooth_gas[xMinGas][xMaxGas][yMinGas][yMaxGas][zMinGas][zMaxGas]
+cut_mass_gas = full_mass_gas[xMinGas][xMaxGas][yMinGas][yMaxGas][zMinGas][zMaxGas]
+cut_metals_gas = full_metals_gas[xMinGas][xMaxGas][yMinGas][yMaxGas][zMinGas][zMaxGas]
+cut_temp_gas = full_temp_gas[xMinGas][xMaxGas][yMinGas][yMaxGas][zMinGas][zMaxGas]
 
-cut_x_pos_gas = np.float32(np.delete(full_x_pos_gas,gasIndex))
-cut_y_pos_gas = np.float32(np.delete(full_y_pos_gas,gasIndex))
-cut_z_pos_gas = np.float32(np.delete(full_z_pos_gas,gasIndex))
-cut_smooth_gas = np.float32(np.delete(full_smooth_gas,gasIndex))
-cut_mass_gas = np.float32(np.delete(full_mass_gas,gasIndex))
-cut_metals_gas = np.float32(np.delete(full_metals_gas,gasIndex))
-cut_temp_gas = np.float32(np.delete(full_temp_gas,gasIndex))
+# shift cut particles to center
+cut_x_pos -= xCenter
+cut_y_pos -= yCenter
+cut_z_pos -= zCenter
+cut_x_pos_gas -= xCenter
+cut_y_pos_gas -= yCenter
+cut_z_pos_gas -= zCenter
 
-# Shift all particles to be centered at x,y,z = 0
-xCenter = (xAbsMax + xAbsMin)/2
-yCenter = (yAbsMax + yAbsMin)/2
-zCenter = (zAbsMax + zAbsMin)/2
+print('number of star particles:', len(cut_x_pos))
+print('number of gas particles:', len(cut_x_pos_gas))
 
-cut_x_pos = cut_x_pos - xCenter
-cut_y_pos = cut_y_pos - yCenter
-cut_z_pos = cut_z_pos - zCenter
+# create MAPPINGS-III particles
+tau_clear = 2.e6 # assume tau_clear years clearing time (e-folding time)
+k = 1.3806485*10**(-19) # boltzmann constant in cm**2 kg s**-2 K**-1
+youngStarMask = cut_age < 1.e7 # Mask for young stars 
+youngStarIndex = [] # Indices of young stars 
+for i in range(len(cut_age)):
+    if youngStarMask[i]:
+        youngStarIndex.append(i)
+print('number of young star particles:',len(youngStarIndex))
+young_x_pos = []
+young_y_pos = []
+young_z_pos = []
+young_mass = []
+young_current_mass = []
+young_metals = []
+young_age = []
+young_x_vel = []
+young_y_vel = []
+young_z_vel = []
+young_smooth = []
+young_SFR = []
+young_logC = []
+young_p = []
+young_f_PDR = []
+def mass_prob(x): # star cluster mass probability distribution
+    return x**(-1.8)
+mass_min = 700
+mass_max = 1e6
+prob_max = 7.57*10**(-6) # slightly larger than 700**(-1.8)
+N_MC = len(youngStarIndex)*10000 # number of Monte Carlo samples (yields ~ N_MC/1000 masked samples)
+# accept / reject Monte Carlo:
+mass = np.random.uniform(mass_min,mass_max,N_MC)  # get uniform temporary mass values
+prob = np.random.uniform(0,prob_max,N_MC)  # get uniform random probability values
+mask = prob < mass_prob(mass) # accept / reject
+sampled_masses = mass[mask] # sample of star cluster masses following the desired distribution (for calculating young_p)
+for i in range(len(youngStarIndex)):
+    parent_index = youngStarIndex[i]
+    parent_mass = cut_mass[parent_index]
+    parent_age = cut_age[parent_index]
+    young_x_pos.append(cut_x_pos[parent_index])
+    young_y_pos.append(cut_y_pos[parent_index])
+    young_z_pos.append(cut_z_pos[parent_index])
+    young_current_mass.append(cut_mass[parent_index]) # assume no mass loss 
+    young_metals.append(cut_metals[parent_index])
+    young_age.append(cut_age[parent_index])
+    young_x_vel.append(cut_x_vel[parent_index])
+    young_y_vel.append(cut_y_vel[parent_index])
+    young_z_vel.append(cut_z_vel[parent_index])
+    young_smooth.append(cut_smooth[parent_index])
+    young_f_PDR.append(1.) 
+    age_bins = np.linspace(0.,1.e7,num=1000)
+    temp_young_f_PDR = np.trapz(np.exp(-1.*age_bins/tau_clear), x=age_bins) / 1e7
+    young_mass.append(parent_mass * temp_young_f_PDR)
+    young_SFR.append(1.e-7 * young_mass[i]) # (units: yr**-1) assumes constant SFR over the last 10 Myrs
+    young_logC.append(np.random.normal(5., 0.4))
+    young_p.append(k*10**((5/2)*(young_logC[i]-(3/5)*np.log10(sampled_masses[i])))) # in kg cm**-1 s**-2
+    young_p[i] *= 100 # convert to Pascals
+    # set parent mass to 0
+    cut_mass[parent_index] = 0.
 
-cut_x_pos_gas = cut_x_pos_gas - xCenter
-cut_y_pos_gas = cut_y_pos_gas - yCenter
-cut_z_pos_gas = cut_z_pos_gas - zCenter 
+# create negative mass gas particles to compensate for dust included in MAPPINGS-III SEDs
+length = len(young_x_pos)
+cut_x_pos_gas = np.append(cut_x_pos_gas, np.asarray(young_x_pos))
+cut_y_pos_gas = np.append(cut_y_pos_gas, np.asarray(young_y_pos))
+cut_z_pos_gas = np.append(cut_z_pos_gas, np.asarray(young_z_pos))
+cut_smooth_gas = np.append(cut_smooth_gas, 3.*np.asarray(young_smooth)) # 3 times larger smoothing length
+cut_mass_gas = np.append(cut_mass_gas, -10.*np.asarray(young_mass)) # 10 times larger negative mass
+cut_metals_gas = np.append(cut_metals_gas, np.asarray(young_metals))
+cut_temp_gas = np.append(cut_temp_gas, np.zeros(length)+8000.) # all have temperature of 8000K (arbitrary)
 
-print('Number of star particles:',len(cut_x_pos))
-print('Number of gas particles:',len(cut_x_pos_gas))
-
+# save text files
 star_header = 'Column 1: position x (pc)\nColumn 2: position y (pc)\nColumn 3: position z (pc)\nColumn 4: smoothing length (pc)\nColumn 5: v_x (km/s)\nColumn 6: v_y (km/s)\nColumn 7: v_z (km/s)\nColumn 8: mass (Msun)\nColumn 9: metallicity ()\nColumn 10: age (yr)'
 gas_header = 'Column 1: position x (pc)\nColumn 2: position y (pc)\nColumn 3: position z (pc)\nColumn 4: smoothing length (pc)\nColumn 5: mass (Msun)\nColumn 6: metallicity ()\nColumn 7: temperature (K)' 
 
 np.savetxt(textPath+'stars.txt',np.float32(np.c_[cut_x_pos, cut_y_pos, cut_z_pos, cut_smooth, cut_x_vel, cut_y_vel, cut_z_vel, cut_mass, cut_metals, cut_age]),header=star_header)
 np.savetxt(textPath+'gas.txt',np.float32(np.c_[cut_x_pos_gas, cut_y_pos_gas, cut_z_pos_gas, cut_smooth_gas, cut_mass_gas, cut_metals_gas, cut_temp_gas]),header=gas_header)
+np.savetxt(textPath+'youngStars.txt',np.float32(np.c_[young_x_pos, young_y_pos, young_z_pos, young_smooth, young_x_vel, young_y_vel, young_z_vel, young_SFR, young_metals, young_logC, young_p, young_f_PDR]))
 
 
-exit()
-
-# Make plots
-
-# SFH 
-plt.figure(figsize=(10,8))
-counts, bins = np.histogram(cut_age,bins=100,weights=cut_mass,density=False)
-plt.hist(bins[:-1], bins, weights=counts)
-plt.xlabel('Age (years)', fontsize=16)
-plt.ylabel('Stellar Mass ('+r'$M_{\odot}$)', fontsize=16)
-plt.xticks(fontsize=16)
-plt.yticks(fontsize=16)
-plt.yscale('log')
-plt.savefig(plotPath+'SFH.png',dpi=300)
-plt.close()
-
-# Gas Metallicity 
-plt.figure(figsize=(10,8))
-counts, bins = np.histogram(cut_metals_gas,bins=500,weights=cut_mass_gas,density=False)
-plt.hist(bins[:-1], bins, weights=counts)
-plt.xlabel('Metallicity', fontsize=16)
-plt.ylabel('Gas Mass ('+r'$M_{\odot}$)', fontsize=16)
-plt.xticks(fontsize=16)
-plt.yticks(fontsize=16)
-plt.yscale('log')
-plt.savefig(plotPath+'gasMetals.png',dpi=300)
-plt.close()
-
-# Gas Temperature Distribution
-plt.figure(figsize=(10,8))
-counts, bins = np.histogram(np.log10(cut_temp_gas),bins=500,weights=cut_mass_gas,density=False)
-plt.hist(bins[:-1], bins, weights=counts)
-plt.xlabel('Log(T)', fontsize=16)
-plt.ylabel('Gas Mass ('+r'$M_{\odot}$)', fontsize=16)
-plt.xticks(fontsize=16)
-plt.yticks(fontsize=16)
-plt.yscale('log')
-plt.savefig(plotPath+'gasTemp.png',dpi=300)
-plt.close()
-
-# gas x position
-plt.figure(figsize=(10,8))
-counts, bins = np.histogram(cut_x_pos_gas,bins=500,weights=cut_mass_gas,density=False)
-plt.hist(bins[:-1], bins, weights=counts)
-plt.xlabel('x (pc)', fontsize=16)
-plt.ylabel('Gas Mass ('+r'$M_{\odot}$)', fontsize=16)
-plt.xticks(fontsize=16)
-plt.yticks(fontsize=16)
-#plt.yscale('log')
-plt.savefig(plotPath+'gasX.png',dpi=300)
-plt.close()
-
-# gas y position
-plt.figure(figsize=(10,8))
-counts, bins = np.histogram(cut_y_pos_gas,bins=500,weights=cut_mass_gas,density=False)
-plt.hist(bins[:-1], bins, weights=counts)
-plt.xlabel('y (pc)', fontsize=16)
-plt.ylabel('Gas Mass ('+r'$M_{\odot}$)', fontsize=16)
-plt.xticks(fontsize=16)
-plt.yticks(fontsize=16)
-#plt.yscale('log')
-plt.savefig(plotPath+'gasY.png',dpi=300)
-plt.close()
-
-# gas z position
-plt.figure(figsize=(10,8))
-counts, bins = np.histogram(cut_z_pos_gas,bins=500,weights=cut_mass_gas,density=False)
-plt.hist(bins[:-1], bins, weights=counts)
-plt.xlabel('z (pc)', fontsize=16)
-plt.ylabel('Gas Mass ('+r'$M_{\odot}$)', fontsize=16)
-plt.xticks(fontsize=16)
-plt.yticks(fontsize=16)
-#plt.yscale('log')
-plt.savefig(plotPath+'gasZ.png',dpi=300)
-plt.close()
-
-# stars x position
-plt.figure(figsize=(10,8))
-counts, bins = np.histogram(cut_x_pos,bins=500,weights=cut_mass,density=False)
-plt.hist(bins[:-1], bins, weights=counts)
-plt.xlabel('x (pc)', fontsize=16)
-plt.ylabel('Stellar Mass ('+r'$M_{\odot}$)', fontsize=16)
-plt.xticks(fontsize=16)
-plt.yticks(fontsize=16)
-#plt.yscale('log')
-plt.savefig(plotPath+'starsX.png',dpi=300)
-plt.close()
-
-# stars y position
-plt.figure(figsize=(10,8))
-counts, bins = np.histogram(cut_y_pos,bins=500,weights=cut_mass,density=False)
-plt.hist(bins[:-1], bins, weights=counts)
-plt.xlabel('y (pc)', fontsize=16)
-plt.ylabel('Stellar Mass ('+r'$M_{\odot}$)', fontsize=16)
-plt.xticks(fontsize=16)
-plt.yticks(fontsize=16)
-#plt.yscale('log')
-plt.savefig(plotPath+'starsY.png',dpi=300)
-plt.close()
-
-# stars z position
-plt.figure(figsize=(10,8))
-counts, bins = np.histogram(cut_z_pos,bins=500,weights=cut_mass,density=False)
-plt.hist(bins[:-1], bins, weights=counts)
-plt.xlabel('z (pc)', fontsize=16)
-plt.ylabel('Stellar Mass ('+r'$M_{\odot}$)', fontsize=16)
-plt.xticks(fontsize=16)
-plt.yticks(fontsize=16)
-#plt.yscale('log')
-plt.savefig(plotPath+'starsZ.png',dpi=300)
-plt.close()
-
-
+print('done')
 
 
 
