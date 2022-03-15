@@ -1,4 +1,4 @@
-# make text files for SKIRT input
+# Calculate and store stellar center of masses for each snapshot
 
 import numpy as np
 import os
